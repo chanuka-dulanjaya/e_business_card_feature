@@ -4,36 +4,35 @@ import { authApi, tokenManager } from '../lib/api';
 interface User {
   id: string;
   email: string;
-}
-
-interface Employee {
-  id: string;
-  userId: string;
-  email: string;
   fullName: string;
-  role: string;
-  mobileNumber: string | null;
+  userType: 'individual' | 'team' | 'organization';
+  role: 'user' | 'admin' | 'super_admin';
   profilePicture: string | null;
-  position: string | null;
-  address: string | null;
+  isEmailVerified: boolean;
+  isActive: boolean;
+  lastLogin: string | null;
+  organization?: { _id: string; name: string; logo?: string } | null;
+  team?: { _id: string; name: string } | null;
+  businessCardCount?: number;
   createdAt?: string;
-  updatedAt?: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  employee: Employee | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  signUp: (data: { email: string; password: string; fullName: string; userType: 'individual' | 'team' | 'organization' }) => Promise<void>;
+  signInWithGoogle: (data: { googleId: string; email: string; fullName: string; profilePicture?: string; userType?: 'individual' | 'team' | 'organization' }) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,12 +48,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await authApi.getCurrentUser();
       setUser(data.user);
-      setEmployee(data.employee);
     } catch (error) {
       console.error('Error fetching current user:', error);
       tokenManager.removeToken();
       setUser(null);
-      setEmployee(null);
     } finally {
       setLoading(false);
     }
@@ -65,9 +62,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await authApi.login(email, password);
       tokenManager.setToken(data.token);
       setUser(data.user);
-      setEmployee(data.employee);
     } catch (error) {
       console.error('Login error:', error);
+      throw error;
+    }
+  };
+
+  const signUp = async (data: { email: string; password: string; fullName: string; userType: 'individual' | 'team' | 'organization' }) => {
+    try {
+      const response = await authApi.signup(data);
+      tokenManager.setToken(response.token);
+      setUser(response.user);
+    } catch (error) {
+      console.error('Signup error:', error);
+      throw error;
+    }
+  };
+
+  const signInWithGoogle = async (data: { googleId: string; email: string; fullName: string; profilePicture?: string; userType?: 'individual' | 'team' | 'organization' }) => {
+    try {
+      const response = await authApi.googleAuth(data);
+      tokenManager.setToken(response.token);
+      setUser(response.user);
+    } catch (error) {
+      console.error('Google auth error:', error);
       throw error;
     }
   };
@@ -75,13 +93,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     tokenManager.removeToken();
     setUser(null);
-    setEmployee(null);
   };
 
-  const isAdmin = employee?.role === 'admin';
+  const refreshUser = async () => {
+    await fetchCurrentUser();
+  };
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+  const isSuperAdmin = user?.role === 'super_admin';
 
   return (
-    <AuthContext.Provider value={{ user, employee, loading, signIn, signOut, isAdmin }}>
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      signIn,
+      signUp,
+      signInWithGoogle,
+      signOut,
+      refreshUser,
+      isAdmin,
+      isSuperAdmin
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -95,4 +127,4 @@ export function useAuth() {
   return context;
 }
 
-export type { Employee };
+export type { User };

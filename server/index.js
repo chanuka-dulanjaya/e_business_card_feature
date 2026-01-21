@@ -8,7 +8,10 @@ import { spawn } from 'child_process';
 
 // Import routes
 import authRoutes from './routes/auth.js';
-import employeeRoutes from './routes/employees.js';
+import adminRoutes from './routes/admin.js';
+import organizationRoutes from './routes/organizations.js';
+import teamRoutes from './routes/teams.js';
+import businessCardRoutes from './routes/businessCards.js';
 
 // Load environment variables
 dotenv.config();
@@ -43,7 +46,10 @@ const connectDB = async () => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/employees', employeeRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/organizations', organizationRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/business-cards', businessCardRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -71,9 +77,9 @@ const startServer = async () => {
     });
 
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('  🚀 Application is ready!');
-    console.log('  📱 Frontend: http://localhost:5173');
-    console.log('  🔌 Backend API: http://localhost:' + PORT + '/api');
+    console.log('  Application is ready!');
+    console.log('  Frontend: http://localhost:5173');
+    console.log('  Backend API: http://localhost:' + PORT + '/api');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   });
 

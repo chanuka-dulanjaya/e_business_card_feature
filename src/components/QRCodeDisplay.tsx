@@ -1,30 +1,37 @@
 import { useEffect, useRef } from 'react';
 import { Download, ExternalLink } from 'lucide-react';
 import QRCode from 'qrcode';
-import type { Employee } from '../contexts/AuthContext';
 
 interface QRCodeDisplayProps {
-  employee: Employee;
+  value: string;
+  size?: number;
+  showControls?: boolean;
+  title?: string;
+  downloadFileName?: string;
 }
 
-export default function QRCodeDisplay({ employee }: QRCodeDisplayProps) {
+export default function QRCodeDisplay({
+  value,
+  size = 300,
+  showControls = false,
+  title,
+  downloadFileName = 'BusinessCard_QR'
+}: QRCodeDisplayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const profileUrl = `${window.location.origin}/profile/${employee.id}`;
 
   const generateQRCode = async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     try {
-      // Generate a real, scannable QR code using qrcode library
-      await QRCode.toCanvas(canvas, profileUrl, {
-        width: 300,
+      await QRCode.toCanvas(canvas, value, {
+        width: size,
         margin: 2,
         color: {
           dark: '#000000',
           light: '#FFFFFF'
         },
-        errorCorrectionLevel: 'H' // High error correction for better scanning
+        errorCorrectionLevel: 'H'
       });
     } catch (error) {
       console.error('Error generating QR code:', error);
@@ -33,8 +40,7 @@ export default function QRCodeDisplay({ employee }: QRCodeDisplayProps) {
 
   useEffect(() => {
     generateQRCode();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [employee.id, profileUrl]);
+  }, [value, size]);
 
   const handleDownload = () => {
     const canvas = canvasRef.current;
@@ -42,23 +48,37 @@ export default function QRCodeDisplay({ employee }: QRCodeDisplayProps) {
 
     const url = canvas.toDataURL('image/png');
     const link = document.createElement('a');
-    link.download = `${employee.fullName.replace(/\s+/g, '_')}_BusinessCard_QR.png`;
+    link.download = `${downloadFileName}.png`;
     link.href = url;
     link.click();
   };
 
   const handleOpenProfile = () => {
-    window.open(profileUrl, '_blank');
+    window.open(value, '_blank');
   };
+
+  if (!showControls) {
+    return (
+      <div className="text-center">
+        <div className="bg-white p-2 rounded-lg border border-slate-200 inline-block">
+          <canvas ref={canvasRef} style={{ width: size, height: size }} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="text-center">
-      <h3 className="text-xl font-bold text-slate-900 mb-2">
-        {employee.fullName}
-      </h3>
-      <p className="text-sm text-slate-600 mb-6">
-        Scan to view business card
-      </p>
+      {title && (
+        <>
+          <h3 className="text-xl font-bold text-slate-900 mb-2">
+            {title}
+          </h3>
+          <p className="text-sm text-slate-600 mb-6">
+            Scan to view business card
+          </p>
+        </>
+      )}
 
       <div className="bg-white p-4 rounded-xl border-2 border-slate-200 inline-block mb-6">
         <canvas ref={canvasRef} className="w-full h-full" />
@@ -84,7 +104,7 @@ export default function QRCodeDisplay({ employee }: QRCodeDisplayProps) {
         <div className="bg-slate-50 rounded-lg p-3">
           <p className="text-xs text-slate-600 mb-1">Business Card URL</p>
           <p className="text-sm font-mono text-slate-900 break-all">
-            {profileUrl}
+            {value}
           </p>
         </div>
       </div>

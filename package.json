@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "db:info": "node server/dbManagement.js info",
     "db:clear": "node server/dbManagement.js clear",
+    "db:seed-admin": "node server/seedSuperAdmin.js",
     "admin:create": "node server/createAdmin.js",
     "admin:reset": "node server/resetPassword.js",
     "debug:login": "node server/debugLogin.js"

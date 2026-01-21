@@ -7,7 +7,10 @@ import { dirname, join } from 'path';
 
 // Import routes
 import authRoutes from './routes/auth.js';
-import employeeRoutes from './routes/employees.js';
+import adminRoutes from './routes/admin.js';
+import organizationRoutes from './routes/organizations.js';
+import teamRoutes from './routes/teams.js';
+import businessCardRoutes from './routes/businessCards.js';
 
 // Load environment variables
 dotenv.config();
@@ -33,7 +36,7 @@ const connectDB = async () => {
     }
 
     await mongoose.connect(mongoURI);
-    console.log('✓ MongoDB connected successfully');
+    console.log('MongoDB connected successfully');
   } catch (error) {
     console.error('MongoDB connection error:', error.message);
     process.exit(1);
@@ -42,7 +45,10 @@ const connectDB = async () => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/employees', employeeRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/organizations', organizationRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/business-cards', businessCardRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -51,13 +57,13 @@ app.get('/api/health', (req, res) => {
 
 // Serve static files from the React app (built frontend)
 const distPath = join(__dirname, '..', 'dist');
-console.log('📁 Serving static files from:', distPath);
+console.log('Serving static files from:', distPath);
 
 app.use(express.static(distPath));
 
 // All other GET requests not handled before will return the React app
 app.get('*', (req, res) => {
-  console.log('📄 Serving index.html for:', req.path);
+  console.log('Serving index.html for:', req.path);
   res.sendFile(join(distPath, 'index.html'), (err) => {
     if (err) {
       console.error('Error serving index.html:', err);
@@ -72,9 +78,9 @@ const startServer = async () => {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('  🚀 Production Server Running!');
-    console.log(`  🌐 URL: http://localhost:${PORT}`);
-    console.log(`  📊 Environment: ${process.env.NODE_ENV || 'production'}`);
+    console.log('  Production Server Running!');
+    console.log(`  URL: http://localhost:${PORT}`);
+    console.log(`  Environment: ${process.env.NODE_ENV || 'production'}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   });
 
