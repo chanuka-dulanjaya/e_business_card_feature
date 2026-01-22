@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { LogIn, UserPlus, Mail, Lock, User, Building2, Users, ArrowLeft, Home } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../lib/api';
@@ -8,10 +8,10 @@ type UserType = 'individual' | 'team' | 'organization';
 
 interface LoginProps {
   initialMode?: 'login' | 'register';
-  onBack?: () => void;
+  onNavigateHome?: () => void;
 }
 
-export default function Login({ initialMode = 'login', onBack }: LoginProps) {
+export default function Login({ initialMode = 'login', onNavigateHome }: LoginProps) {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -516,6 +516,15 @@ export default function Login({ initialMode = 'login', onBack }: LoginProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        {onNavigateHome && (
+          <button
+            onClick={onNavigateHome}
+            className="flex items-center gap-2 text-slate-300 hover:text-white mb-4 transition-colors"
+          >
+            <Home className="w-4 h-4" />
+            Back to Home
+          </button>
+        )}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <div className="flex items-center justify-center mb-8">
             <div className="bg-slate-900 p-3 rounded-xl">

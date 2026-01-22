@@ -1,46 +1,50 @@
 import { useEffect, useState } from 'react';
-import { Mail, Phone, User, Download } from 'lucide-react';
-import { employeeApi } from '../lib/api';
+import { Mail, Phone, User, Download, Building2 } from 'lucide-react';
+import { businessCardApi } from '../lib/api';
 
-interface Employee {
-  id: string;
+interface BusinessCard {
+  _id: string;
   email: string;
   fullName: string;
-  mobileNumber: string | null;
-  profilePicture: string | null;
-  position: string | null;
-  address: string | null;
+  phone?: string;
+  mobileNumber?: string;
+  profilePicture?: string;
+  position?: string;
+  company?: string;
+  address?: string;
+  website?: string;
 }
 
 export default function PublicProfile({ employeeId }: { employeeId: string }) {
-  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [card, setCard] = useState<BusinessCard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchEmployee();
+    fetchBusinessCard();
   }, [employeeId]);
 
-  const fetchEmployee = async () => {
+  const fetchBusinessCard = async () => {
     try {
-      const data = await employeeApi.getById(employeeId);
-      setEmployee(data);
-    } catch (error) {
-      console.error('Error fetching employee:', error);
+      const data = await businessCardApi.getPublic(employeeId);
+      setCard(data.card);
+    } catch (err) {
+      console.error('Error fetching business card:', err);
+      setError('Business card not found or is private');
     } finally {
       setLoading(false);
     }
   };
 
   const downloadVCard = async () => {
-    if (!employee) return;
+    if (!card) return;
 
     // Helper function to get base64 photo data
     const getPhotoBase64 = async (): Promise<{ base64: string; type: string } | null> => {
-      if (!employee.profilePicture) return null;
+      if (!card.profilePicture) return null;
 
-      if (employee.profilePicture.startsWith('data:')) {
-        // Base64 image - extract the base64 data and type
-        const matches = employee.profilePicture.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,(.+)$/i);
+      if (card.profilePicture.startsWith('data:')) {
+        const matches = card.profilePicture.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,(.+)$/i);
         if (matches) {
           return {
             type: matches[1].toUpperCase() === 'PNG' ? 'PNG' : 'JPEG',
@@ -48,9 +52,8 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
           };
         }
       } else {
-        // URL - try to fetch and convert to base64
         try {
-          const response = await fetch(employee.profilePicture);
+          const response = await fetch(card.profilePicture);
           const blob = await response.blob();
           return new Promise((resolve) => {
             const reader = new FileReader();
@@ -69,8 +72,8 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
             reader.onerror = () => resolve(null);
             reader.readAsDataURL(blob);
           });
-        } catch (error) {
-          console.error('Failed to fetch profile picture for vCard:', error);
+        } catch (err) {
+          console.error('Failed to fetch profile picture for vCard:', err);
           return null;
         }
       }
@@ -79,20 +82,28 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
 
     const photoData = await getPhotoBase64();
 
-    // Create vCard content with proper line folding for photo
-    let vCard = `BEGIN:VCARD\r\nVERSION:3.0\r\nFN:${employee.fullName}\r\nEMAIL:${employee.email}\r\n`;
+    // Create vCard content
+    let vCard = `BEGIN:VCARD\r\nVERSION:3.0\r\nFN:${card.fullName}\r\nEMAIL:${card.email}\r\n`;
 
-    if (employee.mobileNumber) {
-      vCard += `TEL;TYPE=CELL:${employee.mobileNumber}\r\n`;
+    if (card.phone) {
+      vCard += `TEL;TYPE=WORK:${card.phone}\r\n`;
     }
-    if (employee.position) {
-      vCard += `TITLE:${employee.position}\r\n`;
+    if (card.mobileNumber) {
+      vCard += `TEL;TYPE=CELL:${card.mobileNumber}\r\n`;
     }
-    if (employee.address) {
-      vCard += `ADR:;;${employee.address};;;;\r\n`;
+    if (card.position) {
+      vCard += `TITLE:${card.position}\r\n`;
+    }
+    if (card.company) {
+      vCard += `ORG:${card.company}\r\n`;
+    }
+    if (card.address) {
+      vCard += `ADR:;;${card.address};;;;\r\n`;
+    }
+    if (card.website) {
+      vCard += `URL:${card.website}\r\n`;
     }
     if (photoData) {
-      // Use proper vCard 3.0 photo format with line folding (75 char lines)
       const photoHeader = `PHOTO;ENCODING=b;TYPE=${photoData.type}:`;
       const base64Lines = photoData.base64.match(/.{1,72}/g) || [];
       vCard += photoHeader + base64Lines[0] + '\r\n';
@@ -102,12 +113,11 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
     }
     vCard += 'END:VCARD';
 
-    // Create blob and download
     const blob = new Blob([vCard], { type: 'text/vcard;charset=utf-8' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${employee.fullName.replace(/\s+/g, '_')}.vcf`;
+    link.download = `${card.fullName.replace(/\s+/g, '_')}.vcf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -122,10 +132,13 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
     );
   }
 
-  if (!employee) {
+  if (error || !card) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-white text-xl">Employee not found</div>
+        <div className="text-center">
+          <div className="text-white text-xl mb-2">Business card not found</div>
+          <p className="text-slate-400">This card may be private or doesn't exist</p>
+        </div>
       </div>
     );
   }
@@ -134,52 +147,21 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-          {/* Header with video background */}
-          <div className="relative px-8 py-12 overflow-hidden">
-            {/* Video Background */}
-            <video
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover"
-            >
-              <source src="/bg.mp4" type="video/mp4" />
-            </video>
-
-            {/* Dark overlay for better text readability */}
-            <div className="absolute inset-0 bg-black/40"></div>
-
-            {/* Content - Logo left, Profile right */}
+          {/* Header with gradient background */}
+          <div className="relative px-8 py-12 bg-gradient-to-br from-slate-800 to-slate-900">
+            {/* Content */}
             <div className="relative flex items-start justify-between">
-              {/* Logo and tagline - Left aligned (1/3 width for mobile) */}
+              {/* Company info - Left aligned */}
               <div className="flex-shrink-0 w-1/3 min-w-[120px]">
-                <a
-                  href="https://overdimetechnologies.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <img
-                    src="/logo_OD.png"
-                    alt="Company Logo"
-                    className="h-20 md:h-24 w-auto mb-3 cursor-pointer hover:opacity-90 transition-opacity"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </a>
-                <p
-                  className="text-white text-[14px] md:text-[16px]"
-                  style={{ fontFamily: 'Calibri, sans-serif' }}
-                >
-                  Supporting Your <br />Digitization Journey
-                </p>
-                {employee.address && (
-                  <p
-                    className="text-slate-300 text-[11px] md:text-[12px] mt-2"
-                    style={{ fontFamily: 'Calibri, sans-serif' }}
-                  >
-                    {employee.address}
+                {card.company && (
+                  <div className="flex items-center gap-2 mb-3">
+                    <Building2 className="w-5 h-5 text-slate-300" />
+                    <span className="text-white font-medium">{card.company}</span>
+                  </div>
+                )}
+                {card.address && (
+                  <p className="text-slate-300 text-sm mt-2">
+                    {card.address}
                   </p>
                 )}
               </div>
@@ -188,24 +170,20 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
               <div className="flex flex-col items-end text-right">
                 {/* Profile picture */}
                 <div className="w-24 h-24 md:w-32 md:h-32 rounded-full border-4 border-white overflow-hidden bg-white shadow-lg mb-4">
-                  <img
-                    src={employee.profilePicture || ''}
-                    alt={employee.fullName}
-                    className={`w-full h-full object-cover ${!employee.profilePicture ? 'hidden' : ''}`}
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                      const placeholder = document.getElementById('profile-placeholder');
-                      if (placeholder) placeholder.style.display = 'flex';
-                    }}
-                    onLoad={(e) => {
-                      e.currentTarget.style.display = 'block';
-                      const placeholder = document.getElementById('profile-placeholder');
-                      if (placeholder) placeholder.style.display = 'none';
-                    }}
-                  />
+                  {card.profilePicture ? (
+                    <img
+                      src={card.profilePicture}
+                      alt={card.fullName}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (placeholder) placeholder.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
                   <div
-                    id="profile-placeholder"
-                    className={`w-full h-full flex items-center justify-center bg-slate-100 ${employee.profilePicture ? 'hidden' : ''}`}
+                    className={`w-full h-full flex items-center justify-center bg-slate-100 ${card.profilePicture ? 'hidden' : ''}`}
                   >
                     <User className="w-12 h-12 md:w-16 md:h-16 text-slate-400" />
                   </div>
@@ -213,10 +191,10 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
 
                 {/* Name and Position */}
                 <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
-                  {employee.fullName}
+                  {card.fullName}
                 </h1>
-                {employee.position && (
-                  <p className="text-slate-200 text-base md:text-lg">{employee.position}</p>
+                {card.position && (
+                  <p className="text-slate-200 text-base md:text-lg">{card.position}</p>
                 )}
               </div>
             </div>
@@ -230,15 +208,32 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
               <div className="flex-1">
                 <p className="text-sm text-slate-600 font-medium">Email</p>
                 <a
-                  href={`mailto:${employee.email}`}
+                  href={`mailto:${card.email}`}
                   className="text-slate-900 hover:text-blue-600 transition-colors underline"
                 >
-                  {employee.email}
+                  {card.email}
                 </a>
               </div>
             </div>
 
-            {employee.mobileNumber && (
+            {card.phone && (
+              <div className="flex items-start gap-4">
+                <div className="bg-slate-100 p-3 rounded-lg">
+                  <Phone className="w-5 h-5 text-slate-700" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-slate-600 font-medium">Phone</p>
+                  <a
+                    href={`tel:${card.phone}`}
+                    className="text-slate-900 hover:text-blue-600 transition-colors underline"
+                  >
+                    {card.phone}
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {card.mobileNumber && (
               <div className="flex items-start gap-4">
                 <div className="bg-slate-100 p-3 rounded-lg">
                   <Phone className="w-5 h-5 text-slate-700" />
@@ -246,10 +241,29 @@ export default function PublicProfile({ employeeId }: { employeeId: string }) {
                 <div className="flex-1">
                   <p className="text-sm text-slate-600 font-medium">Mobile</p>
                   <a
-                    href={`tel:${employee.mobileNumber}`}
+                    href={`tel:${card.mobileNumber}`}
                     className="text-slate-900 hover:text-blue-600 transition-colors underline"
                   >
-                    {employee.mobileNumber}
+                    {card.mobileNumber}
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {card.website && (
+              <div className="flex items-start gap-4">
+                <div className="bg-slate-100 p-3 rounded-lg">
+                  <Building2 className="w-5 h-5 text-slate-700" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-slate-600 font-medium">Website</p>
+                  <a
+                    href={card.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-slate-900 hover:text-blue-600 transition-colors underline"
+                  >
+                    {card.website}
                   </a>
                 </div>
               </div>

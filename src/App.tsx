@@ -1,39 +1,69 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from './contexts/AuthContext';
+import Home from './pages/Home';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import PublicProfile from './pages/PublicProfile';
 
+type RouteType = 'home' | 'login' | 'register' | 'dashboard' | 'profile';
+
 function App() {
   const { user, loading } = useAuth();
-  const [route, setRoute] = useState<{ type: 'login' | 'dashboard' | 'profile'; id?: string }>({
-    type: 'login',
+  const [route, setRoute] = useState<{ type: RouteType; id?: string }>({
+    type: 'home',
   });
+
+  const navigate = (page: RouteType) => {
+    const pathMap: Record<RouteType, string> = {
+      home: '/',
+      login: '/login',
+      register: '/register',
+      dashboard: '/dashboard',
+      profile: '/profile',
+    };
+    window.history.pushState({}, '', pathMap[page]);
+    setRoute({ type: page });
+  };
 
   useEffect(() => {
     const path = window.location.pathname;
+    // Match both /card/:id and /profile/:id for public business card view
+    const cardMatch = path.match(/^\/card\/([a-f0-9]+)$/);
     const profileMatch = path.match(/^\/profile\/([a-f0-9-]+)$/);
 
-    if (profileMatch) {
+    if (cardMatch) {
+      setRoute({ type: 'profile', id: cardMatch[1] });
+    } else if (profileMatch) {
       setRoute({ type: 'profile', id: profileMatch[1] });
-    } else if (user) {
+    } else if (path === '/login') {
+      setRoute({ type: 'login' });
+    } else if (path === '/register') {
+      setRoute({ type: 'register' });
+    } else if (path === '/dashboard' || user) {
       setRoute({ type: 'dashboard' });
     } else {
-      setRoute({ type: 'login' });
+      setRoute({ type: 'home' });
     }
   }, [user]);
 
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
+      const cardMatch = path.match(/^\/card\/([a-f0-9]+)$/);
       const profileMatch = path.match(/^\/profile\/([a-f0-9-]+)$/);
 
-      if (profileMatch) {
+      if (cardMatch) {
+        setRoute({ type: 'profile', id: cardMatch[1] });
+      } else if (profileMatch) {
         setRoute({ type: 'profile', id: profileMatch[1] });
-      } else if (user) {
+      } else if (path === '/login') {
+        setRoute({ type: 'login' });
+      } else if (path === '/register') {
+        setRoute({ type: 'register' });
+      } else if (path === '/dashboard' || user) {
         setRoute({ type: 'dashboard' });
       } else {
-        setRoute({ type: 'login' });
+        setRoute({ type: 'home' });
       }
     };
 
@@ -53,11 +83,22 @@ function App() {
     return <PublicProfile employeeId={route.id} />;
   }
 
-  if (!user) {
-    return <Login />;
+  // If user is logged in, show dashboard
+  if (user) {
+    return <Dashboard />;
   }
 
-  return <Dashboard />;
+  // Show appropriate page for non-authenticated users
+  if (route.type === 'login') {
+    return <Login initialMode="login" onNavigateHome={() => navigate('home')} />;
+  }
+
+  if (route.type === 'register') {
+    return <Login initialMode="register" onNavigateHome={() => navigate('home')} />;
+  }
+
+  // Default: show home page
+  return <Home onNavigate={(page: 'login' | 'register') => navigate(page)} />;
 }
 
 export default App;

@@ -112,8 +112,7 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Index for faster queries
-userSchema.index({ googleId: 1 });
+// Index for faster queries (googleId already has unique index from schema definition)
 userSchema.index({ organizationId: 1 });
 userSchema.index({ teamId: 1 });
 userSchema.index({ role: 1 });

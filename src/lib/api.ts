@@ -1,6 +1,6 @@
 // Use relative URL in production, absolute URL in development
 const API_URL = (import.meta as any).env?.VITE_API_URL ||
-  (import.meta.env?.MODE === 'production' ? '/api' : 'http://localhost:5000/api');
+  ((import.meta as any).env?.MODE === 'production' ? '/api' : 'http://localhost:5000/api');
 
 // Helper function to get auth token
 const getToken = () => {
@@ -384,6 +384,58 @@ export const adminApi = {
 
   getActivity: async (limit?: number) => {
     return fetchWithAuth(`/admin/activity${limit ? `?limit=${limit}` : ''}`);
+  },
+};
+
+// Employee API
+export const employeeApi = {
+  getAll: async () => {
+    return fetchWithAuth('/employees');
+  },
+
+  getById: async (id: string) => {
+    // Public endpoint - no auth needed
+    const response = await fetch(`${API_URL}/employees/${id}`);
+    if (!response.ok) {
+      throw new Error('Employee not found');
+    }
+    return response.json();
+  },
+
+  create: async (data: {
+    email: string;
+    password: string;
+    fullName: string;
+    role?: string;
+    mobileNumber?: string;
+    profilePicture?: string;
+    position?: string;
+    address?: string;
+  }) => {
+    return fetchWithAuth('/employees', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  update: async (id: string, data: Partial<{
+    fullName: string;
+    role: string;
+    mobileNumber: string;
+    profilePicture: string;
+    position: string;
+    address: string;
+  }>) => {
+    return fetchWithAuth(`/employees/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: async (id: string) => {
+    return fetchWithAuth(`/employees/${id}`, {
+      method: 'DELETE',
+    });
   },
 };
 

@@ -1,6 +1,8 @@
 import { useAuth } from '../contexts/AuthContext';
 import SuperAdminDashboard from '../components/SuperAdminDashboard';
 import UserDashboard from '../components/UserDashboard';
+import TeamDashboard from '../components/TeamDashboard';
+import OrganizationDashboard from '../components/OrganizationDashboard';
 import { LogOut, Shield, User, Building2, Users } from 'lucide-react';
 
 export default function Dashboard() {
@@ -67,7 +69,15 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {isSuperAdmin ? <SuperAdminDashboard /> : <UserDashboard />}
+        {isSuperAdmin ? (
+          <SuperAdminDashboard />
+        ) : user?.userType === 'organization' ? (
+          <OrganizationDashboard />
+        ) : user?.userType === 'team' ? (
+          <TeamDashboard />
+        ) : (
+          <UserDashboard />
+        )}
       </main>
     </div>
   );
