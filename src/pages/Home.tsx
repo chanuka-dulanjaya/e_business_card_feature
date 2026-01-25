@@ -8,6 +8,7 @@ import { HowItWorks } from '@/components/HowItWorks';
 import { TestimonialsSection } from '@/components/TestimonialsSection';
 import { FloatingCard } from '@/components/FloatingCard';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { Logo } from '@/components/Logo';
 
 interface HomeProps {
   onNavigateToLogin?: () => void;
@@ -98,11 +99,8 @@ export default function Home({ onNavigateToLogin, onNavigateToRegister }: HomePr
         <nav className="glass-strong sticky top-0 z-50 transition-all duration-300">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
-              <div className={`flex items-center gap-2 transition-all duration-700 ${isVisible ? 'translate-x-0 opacity-100' : '-translate-x-10 opacity-0'}`}>
-                <div className="bg-gradient-primary p-2 rounded-lg shadow-glow">
-                  <CreditCard className="w-6 h-6 text-primary-foreground" />
-                </div>
-                <span className="text-xl font-bold text-foreground">E-Business Card</span>
+              <div className={`flex items-center transition-all duration-700 ${isVisible ? 'translate-x-0 opacity-100' : '-translate-x-10 opacity-0'}`}>
+                <Logo height={40} />
               </div>
               
               <div className={`flex items-center gap-2 transition-all duration-700 delay-100 ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-10 opacity-0'}`}>
@@ -290,11 +288,8 @@ export default function Home({ onNavigateToLogin, onNavigateToRegister }: HomePr
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
               <div className="md:col-span-2">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="bg-gradient-primary p-1.5 rounded shadow-glow">
-                    <CreditCard className="w-5 h-5 text-primary-foreground" />
-                  </div>
-                  <span className="font-bold text-lg text-foreground">E-Business Card</span>
+                <div className="flex items-center mb-4">
+                  <Logo height={36} />
                 </div>
                 <p className="text-muted-foreground max-w-sm">
                   The modern way to share your professional identity. Create, customize, and share digital business cards instantly.
@@ -324,7 +319,7 @@ export default function Home({ onNavigateToLogin, onNavigateToRegister }: HomePr
             
             <div className="pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4">
               <p className="text-muted-foreground text-sm">
-                © {new Date().getFullYear()} E-Business Card. All rights reserved.
+                © {new Date().getFullYear()} SnapCard. All rights reserved.
               </p>
               <div className="flex gap-6 text-sm text-muted-foreground">
                 <span className="hover:text-primary cursor-pointer transition-colors">Privacy Policy</span>

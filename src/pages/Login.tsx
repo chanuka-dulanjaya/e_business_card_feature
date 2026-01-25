@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LogIn, UserPlus, Mail, Lock, User, Building2, Users, ArrowLeft, Home } from 'lucide-react';
+import { Mail, Lock, User, Building2, Users, ArrowLeft, Home } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi } from '../lib/api';
+import { Logo } from '../components/Logo';
 
 type AuthMode = 'login' | 'register' | 'forgot-password' | 'reset-password';
 type UserType = 'individual' | 'team' | 'organization';
@@ -597,19 +598,6 @@ export default function Login({ initialMode = 'login', onNavigateHome }: LoginPr
     }
   };
 
-  const getIcon = () => {
-    switch (mode) {
-      case 'login':
-        return LogIn;
-      case 'register':
-        return UserPlus;
-      default:
-        return Mail;
-    }
-  };
-
-  const Icon = getIcon();
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -624,9 +612,7 @@ export default function Login({ initialMode = 'login', onNavigateHome }: LoginPr
         )}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <div className="flex items-center justify-center mb-8">
-            <div className="bg-slate-900 p-3 rounded-xl">
-              <Icon className="w-8 h-8 text-white" />
-            </div>
+            <Logo height={48} />
           </div>
 
           <h1 className="text-3xl font-bold text-center text-slate-900 mb-2">
