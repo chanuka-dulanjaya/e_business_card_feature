@@ -98,7 +98,12 @@ function App() {
   }
 
   // Default: show home page
-  return <Home onNavigate={(page: 'login' | 'register') => navigate(page)} />;
+  return (
+    <Home
+      onNavigateToLogin={() => navigate('login')}
+      onNavigateToRegister={() => navigate('register')}
+    />
+  );
 }
 
 export default App;

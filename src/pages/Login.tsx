@@ -198,7 +198,9 @@ export default function Login({ initialMode = 'login', onNavigateHome }: LoginPr
           auto_select: false,
         });
 
-        const buttonContainer = document.getElementById('google-signin-button');
+        // Render button based on current mode
+        const buttonId = mode === 'register' ? 'google-signup-button' : 'google-login-button';
+        const buttonContainer = document.getElementById(buttonId);
         if (buttonContainer) {
           buttonContainer.innerHTML = ''; // Clear previous button
           window.google!.accounts.id.renderButton(buttonContainer, {
@@ -302,7 +304,7 @@ export default function Login({ initialMode = 'login', onNavigateHome }: LoginPr
         </div>
       </div>
 
-      <div id="google-signin-button" className="flex justify-center"></div>
+      <div id="google-login-button" className="flex justify-center"></div>
 
       <p className="text-center text-slate-600">
         Don't have an account?{' '}
@@ -442,7 +444,7 @@ export default function Login({ initialMode = 'login', onNavigateHome }: LoginPr
         </div>
       </div>
 
-      <div id="google-signin-button" className="flex justify-center"></div>
+      <div id="google-signup-button" className="flex justify-center"></div>
 
       <p className="text-center text-slate-600">
         Already have an account?{' '}
