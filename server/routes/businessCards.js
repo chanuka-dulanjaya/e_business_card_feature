@@ -40,17 +40,26 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   try {
     let cards;
+    const { teamId, organizationId } = req.query;
 
     if (req.userRole === 'super_admin') {
-      // Super admin can see all cards
-      cards = await BusinessCard.find()
+      // Super admin can see all cards, with optional filtering
+      const filter = {};
+      if (teamId) filter.teamId = teamId;
+      if (organizationId) filter.organizationId = organizationId;
+
+      cards = await BusinessCard.find(filter)
         .populate('userId', 'fullName email userType')
         .populate('organizationId', 'name')
         .populate('teamId', 'name')
         .sort({ createdAt: -1 });
     } else {
-      // Regular users see only their cards
-      cards = await BusinessCard.find({ userId: req.userId })
+      // Regular users see only their cards, with optional filtering
+      const filter = { userId: req.userId };
+      if (teamId) filter.teamId = teamId;
+      if (organizationId) filter.organizationId = organizationId;
+
+      cards = await BusinessCard.find(filter)
         .populate('organizationId', 'name')
         .populate('teamId', 'name')
         .sort({ createdAt: -1 });

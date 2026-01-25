@@ -104,6 +104,10 @@ export const businessCardApi = {
     return fetchWithAuth('/business-cards');
   },
 
+  getByTeam: async (teamId: string) => {
+    return fetchWithAuth(`/business-cards?teamId=${teamId}`);
+  },
+
   getById: async (id: string) => {
     return fetchWithAuth(`/business-cards/${id}`);
   },

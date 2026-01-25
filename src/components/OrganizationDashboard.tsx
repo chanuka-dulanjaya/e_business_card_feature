@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Building2, Users, Plus, User, Save, Lock, CreditCard, Trash2, Edit2, Eye, ExternalLink } from 'lucide-react';
+import { Building2, Users, Plus, User, Save, Lock, CreditCard, Trash2, Edit2, Eye, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authApi, organizationApi, teamApi, businessCardApi } from '../lib/api';
 import QRCodeDisplay from './QRCodeDisplay';
@@ -13,7 +13,6 @@ interface Organization {
   address?: string;
   phone?: string;
   email?: string;
-  teams?: Team[];
   createdAt: string;
 }
 
@@ -48,16 +47,22 @@ interface BusinessCard {
   isPublic: boolean;
   isActive: boolean;
   viewCount: number;
+  teamId?: string;
+  organizationId?: string;
 }
 
 export default function OrganizationDashboard() {
   const { user, refreshUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<'organizations' | 'teams' | 'cards' | 'profile' | 'password'>('organizations');
+  const [activeTab, setActiveTab] = useState<'hierarchy' | 'profile' | 'password'>('hierarchy');
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
-  const [businessCards, setBusinessCards] = useState<BusinessCard[]>([]);
+  const [teamCards, setTeamCards] = useState<Record<string, BusinessCard[]>>({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });
+
+  // Expansion state
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
 
   // Organization form
   const [showOrgForm, setShowOrgForm] = useState(false);
@@ -75,6 +80,7 @@ export default function OrganizationDashboard() {
   // Team form
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [teamOrgId, setTeamOrgId] = useState<string>('');
   const [teamForm, setTeamForm] = useState({ name: '', description: '', organizationId: '' });
 
   // Card form
@@ -90,7 +96,9 @@ export default function OrganizationDashboard() {
     address: '',
     website: '',
     profilePicture: '',
-    isPublic: true
+    isPublic: true,
+    teamId: '',
+    organizationId: ''
   });
 
   // Profile form
@@ -103,9 +111,7 @@ export default function OrganizationDashboard() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   useEffect(() => {
-    fetchOrganizations();
-    fetchTeams();
-    fetchBusinessCards();
+    fetchData();
   }, []);
 
   useEffect(() => {
@@ -115,36 +121,77 @@ export default function OrganizationDashboard() {
     }
   }, [user]);
 
-  const fetchOrganizations = async () => {
+  const fetchData = async () => {
     try {
-      const data = await organizationApi.getAll();
-      setOrganizations(data.organizations || data || []);
+      const [orgData, teamData] = await Promise.all([
+        organizationApi.getAll(),
+        teamApi.getAll()
+      ]);
+
+      const orgs = orgData.organizations || orgData || [];
+      const teamsArr = teamData.teams || teamData || [];
+
+      setOrganizations(orgs);
+      setTeams(teamsArr);
+
+      // Auto-expand first org
+      if (orgs.length > 0) {
+        setExpandedOrgs(new Set([orgs[0]._id]));
+      }
+
+      // Fetch cards for each team
+      const cardsMap: Record<string, BusinessCard[]> = {};
+      for (const team of teamsArr) {
+        try {
+          const cardData = await businessCardApi.getByTeam(team._id);
+          cardsMap[team._id] = cardData.cards || [];
+        } catch {
+          cardsMap[team._id] = [];
+        }
+      }
+      setTeamCards(cardsMap);
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
-      setOrganizations([]);
+      console.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchTeams = async () => {
+  const fetchCardsForTeam = async (teamId: string) => {
     try {
-      const data = await teamApi.getAll();
-      setTeams(data.teams || data || []);
-    } catch (error) {
-      console.error('Failed to fetch teams:', error);
-      setTeams([]);
+      const cardData = await businessCardApi.getByTeam(teamId);
+      setTeamCards(prev => ({ ...prev, [teamId]: cardData.cards || [] }));
+    } catch {
+      setTeamCards(prev => ({ ...prev, [teamId]: [] }));
     }
   };
 
-  const fetchBusinessCards = async () => {
-    try {
-      const data = await businessCardApi.getAll();
-      setBusinessCards(data.cards || []);
-    } catch (error) {
-      console.error('Failed to fetch business cards:', error);
-    }
+  const toggleOrgExpansion = (orgId: string) => {
+    setExpandedOrgs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(orgId)) {
+        newSet.delete(orgId);
+      } else {
+        newSet.add(orgId);
+      }
+      return newSet;
+    });
   };
+
+  const toggleTeamExpansion = (teamId: string) => {
+    setExpandedTeams(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(teamId)) {
+        newSet.delete(teamId);
+      } else {
+        newSet.add(teamId);
+      }
+      return newSet;
+    });
+  };
+
+  // Stats
+  const totalCards = Object.values(teamCards).flat().length;
 
   // Organization handlers
   const handleCreateOrg = async (e: React.FormEvent) => {
@@ -159,7 +206,7 @@ export default function OrganizationDashboard() {
         await organizationApi.create(orgForm);
         setMessage({ type: 'success', text: 'Organization created successfully!' });
       }
-      fetchOrganizations();
+      fetchData();
       setShowOrgForm(false);
       setSelectedOrg(null);
       resetOrgForm();
@@ -169,13 +216,12 @@ export default function OrganizationDashboard() {
   };
 
   const handleDeleteOrg = async (orgId: string) => {
-    if (!confirm('Are you sure you want to delete this organization? All teams and data will be affected.')) return;
+    if (!confirm('Are you sure you want to delete this organization? All teams and cards will be affected.')) return;
 
     try {
       await organizationApi.delete(orgId);
       setMessage({ type: 'success', text: 'Organization deleted successfully!' });
-      fetchOrganizations();
-      fetchTeams();
+      fetchData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to delete organization' });
     }
@@ -220,9 +266,10 @@ export default function OrganizationDashboard() {
         await teamApi.create(teamForm);
         setMessage({ type: 'success', text: 'Team created successfully!' });
       }
-      fetchTeams();
+      fetchData();
       setShowTeamForm(false);
       setSelectedTeam(null);
+      setTeamOrgId('');
       setTeamForm({ name: '', description: '', organizationId: '' });
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to save team' });
@@ -230,12 +277,12 @@ export default function OrganizationDashboard() {
   };
 
   const handleDeleteTeam = async (teamId: string) => {
-    if (!confirm('Are you sure you want to delete this team?')) return;
+    if (!confirm('Are you sure you want to delete this team? All cards in this team will be unlinked.')) return;
 
     try {
       await teamApi.delete(teamId);
       setMessage({ type: 'success', text: 'Team deleted successfully!' });
-      fetchTeams();
+      fetchData();
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to delete team' });
     }
@@ -248,6 +295,12 @@ export default function OrganizationDashboard() {
       description: team.description || '',
       organizationId: team.organizationId || ''
     });
+    setShowTeamForm(true);
+  };
+
+  const handleAddTeamToOrg = (orgId: string) => {
+    setTeamOrgId(orgId);
+    setTeamForm({ name: '', description: '', organizationId: orgId });
     setShowTeamForm(true);
   };
 
@@ -264,7 +317,9 @@ export default function OrganizationDashboard() {
         await businessCardApi.create(cardForm);
         setMessage({ type: 'success', text: 'Business card created successfully!' });
       }
-      fetchBusinessCards();
+      if (cardForm.teamId) {
+        fetchCardsForTeam(cardForm.teamId);
+      }
       setShowCardForm(false);
       setSelectedCard(null);
       resetCardForm();
@@ -273,13 +328,13 @@ export default function OrganizationDashboard() {
     }
   };
 
-  const handleDeleteCard = async (cardId: string) => {
+  const handleDeleteCard = async (cardId: string, teamId: string) => {
     if (!confirm('Are you sure you want to delete this business card?')) return;
 
     try {
       await businessCardApi.delete(cardId);
       setMessage({ type: 'success', text: 'Business card deleted successfully!' });
-      fetchBusinessCards();
+      fetchCardsForTeam(teamId);
     } catch (error: any) {
       setMessage({ type: 'error', text: error.message || 'Failed to delete business card' });
     }
@@ -297,23 +352,32 @@ export default function OrganizationDashboard() {
       address: card.address || '',
       website: card.website || '',
       profilePicture: card.profilePicture || '',
-      isPublic: card.isPublic
+      isPublic: card.isPublic,
+      teamId: card.teamId || '',
+      organizationId: card.organizationId || ''
     });
     setShowCardForm(true);
   };
 
-  const resetCardForm = () => {
+  const handleAddCardToTeam = (teamId: string, orgId: string) => {
+    resetCardForm(teamId, orgId);
+    setShowCardForm(true);
+  };
+
+  const resetCardForm = (teamId?: string, orgId?: string) => {
     setCardForm({
-      fullName: user?.fullName || '',
-      email: user?.email || '',
+      fullName: '',
+      email: '',
       phone: '',
       mobileNumber: '',
       position: '',
       company: '',
       address: '',
       website: '',
-      profilePicture: user?.profilePicture || '',
-      isPublic: true
+      profilePicture: '',
+      isPublic: true,
+      teamId: teamId || '',
+      organizationId: orgId || ''
     });
   };
 
@@ -362,6 +426,8 @@ export default function OrganizationDashboard() {
 
   if (!user) return null;
 
+  const isFormOpen = showOrgForm || showTeamForm || showCardForm;
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* User Type Info */}
@@ -372,7 +438,7 @@ export default function OrganizationDashboard() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Organization Account</h2>
-            <p className="text-sm text-slate-600">Create organizations with multiple teams and manage employees</p>
+            <p className="text-sm text-slate-600">Manage organizations, teams, and business cards in a hierarchical structure</p>
           </div>
         </div>
       </div>
@@ -407,7 +473,7 @@ export default function OrganizationDashboard() {
               <CreditCard className="w-5 h-5 text-green-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-slate-900">{businessCards.length}</p>
+              <p className="text-2xl font-bold text-slate-900">{totalCards}</p>
               <p className="text-sm text-slate-600">Business Cards</p>
             </div>
           </div>
@@ -417,31 +483,13 @@ export default function OrganizationDashboard() {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-slate-200 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('organizations')}
+          onClick={() => setActiveTab('hierarchy')}
           className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
-            activeTab === 'organizations' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'
+            activeTab === 'hierarchy' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
           <Building2 className="w-5 h-5" />
           Organizations
-        </button>
-        <button
-          onClick={() => setActiveTab('teams')}
-          className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
-            activeTab === 'teams' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Users className="w-5 h-5" />
-          Teams
-        </button>
-        <button
-          onClick={() => setActiveTab('cards')}
-          className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${
-            activeTab === 'cards' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <CreditCard className="w-5 h-5" />
-          Business Cards
         </button>
         <button
           onClick={() => setActiveTab('profile')}
@@ -472,13 +520,13 @@ export default function OrganizationDashboard() {
         </div>
       )}
 
-      {/* Organizations Tab */}
-      {activeTab === 'organizations' && (
+      {/* Hierarchy Tab */}
+      {activeTab === 'hierarchy' && (
         <div className="space-y-6">
-          {!showOrgForm ? (
+          {!isFormOpen ? (
             <>
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-slate-900">Your Organizations</h3>
+                <h3 className="text-lg font-semibold text-slate-900">Organization Hierarchy</h3>
                 <button
                   onClick={() => { resetOrgForm(); setShowOrgForm(true); }}
                   className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
@@ -496,7 +544,7 @@ export default function OrganizationDashboard() {
                 <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
                   <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-slate-900 mb-2">No organizations yet</h3>
-                  <p className="text-slate-600 mb-6">Create your first organization to start adding teams</p>
+                  <p className="text-slate-600 mb-6">Create your first organization to start building your hierarchy</p>
                   <button
                     onClick={() => { resetOrgForm(); setShowOrgForm(true); }}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800"
@@ -506,31 +554,49 @@ export default function OrganizationDashboard() {
                   </button>
                 </div>
               ) : (
-                <div className="grid gap-6">
-                  {organizations.map((org) => (
-                    <div key={org._id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                      <div className="p-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-start gap-4">
+                <div className="space-y-4">
+                  {organizations.map((org) => {
+                    const isOrgExpanded = expandedOrgs.has(org._id);
+                    const orgTeams = teams.filter(t => t.organizationId === org._id);
+
+                    return (
+                      <div key={org._id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                        {/* Organization Header */}
+                        <div
+                          className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50"
+                          onClick={() => toggleOrgExpansion(org._id)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <button className="p-1 hover:bg-slate-100 rounded">
+                              {isOrgExpanded ? (
+                                <ChevronDown className="w-5 h-5 text-slate-500" />
+                              ) : (
+                                <ChevronRight className="w-5 h-5 text-slate-500" />
+                              )}
+                            </button>
                             {org.logo ? (
-                              <img src={org.logo} alt={org.name} className="w-12 h-12 rounded-lg object-cover" />
+                              <img src={org.logo} alt={org.name} className="w-10 h-10 rounded-lg object-cover" />
                             ) : (
-                              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                                <Building2 className="w-6 h-6 text-purple-600" />
+                              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                <Building2 className="w-5 h-5 text-purple-600" />
                               </div>
                             )}
                             <div>
-                              <h4 className="text-lg font-semibold text-slate-900">{org.name}</h4>
-                              {org.description && (
-                                <p className="text-sm text-slate-600 mt-1">{org.description}</p>
-                              )}
-                              <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
-                                {org.email && <span>{org.email}</span>}
-                                {org.phone && <span>{org.phone}</span>}
-                              </div>
+                              <h4 className="font-semibold text-slate-900">{org.name}</h4>
+                              <p className="text-sm text-slate-500">
+                                {orgTeams.length} team{orgTeams.length !== 1 ? 's' : ''}
+                                {org.description && ` • ${org.description}`}
+                              </p>
                             </div>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                            <button
+                              onClick={() => handleAddTeamToOrg(org._id)}
+                              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Add Team
+                            </button>
                             <button
                               onClick={() => handleEditOrg(org)}
                               className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
@@ -546,36 +612,171 @@ export default function OrganizationDashboard() {
                           </div>
                         </div>
 
-                        {/* Teams in this organization */}
-                        <div className="mt-4 pt-4 border-t border-slate-200">
-                          <h5 className="text-sm font-medium text-slate-700 mb-3">
-                            Teams ({teams.filter(t => t.organizationId === org._id).length})
-                          </h5>
-                          <div className="flex flex-wrap gap-2">
-                            {teams.filter(t => t.organizationId === org._id).map((team) => (
-                              <span key={team._id} className="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm">
-                                {team.name}
-                              </span>
-                            ))}
-                            <button
-                              onClick={() => {
-                                setTeamForm({ name: '', description: '', organizationId: org._id });
-                                setShowTeamForm(true);
-                                setActiveTab('teams');
-                              }}
-                              className="px-3 py-1 border border-dashed border-slate-300 text-slate-500 rounded-full text-sm hover:border-slate-400"
-                            >
-                              + Add Team
-                            </button>
+                        {/* Organization Teams */}
+                        {isOrgExpanded && (
+                          <div className="border-t border-slate-200 bg-slate-50 p-4">
+                            {orgTeams.length === 0 ? (
+                              <div className="text-center py-6">
+                                <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                                <p className="text-slate-500 mb-4">No teams in this organization</p>
+                                <button
+                                  onClick={() => handleAddTeamToOrg(org._id)}
+                                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                  Add First Team
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {orgTeams.map((team) => {
+                                  const isTeamExpanded = expandedTeams.has(team._id);
+                                  const cards = teamCards[team._id] || [];
+
+                                  return (
+                                    <div key={team._id} className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                                      {/* Team Header */}
+                                      <div
+                                        className="p-3 flex items-center justify-between cursor-pointer hover:bg-slate-50"
+                                        onClick={() => toggleTeamExpansion(team._id)}
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <button className="p-0.5 hover:bg-slate-100 rounded">
+                                            {isTeamExpanded ? (
+                                              <ChevronDown className="w-4 h-4 text-slate-500" />
+                                            ) : (
+                                              <ChevronRight className="w-4 h-4 text-slate-500" />
+                                            )}
+                                          </button>
+                                          <div className="p-1.5 bg-blue-100 rounded">
+                                            <Users className="w-4 h-4 text-blue-600" />
+                                          </div>
+                                          <div>
+                                            <h5 className="font-medium text-slate-900">{team.name}</h5>
+                                            <p className="text-xs text-slate-500">
+                                              {cards.length} card{cards.length !== 1 ? 's' : ''}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                          <button
+                                            onClick={() => handleAddCardToTeam(team._id, org._id)}
+                                            className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-900 text-white rounded hover:bg-slate-800"
+                                          >
+                                            <Plus className="w-3 h-3" />
+                                            Card
+                                          </button>
+                                          <button
+                                            onClick={() => handleEditTeam(team)}
+                                            className="p-1.5 text-slate-600 hover:bg-slate-100 rounded"
+                                          >
+                                            <Edit2 className="w-3 h-3" />
+                                          </button>
+                                          <button
+                                            onClick={() => handleDeleteTeam(team._id)}
+                                            className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Team Cards */}
+                                      {isTeamExpanded && (
+                                        <div className="border-t border-slate-200 bg-slate-50 p-3">
+                                          {cards.length === 0 ? (
+                                            <div className="text-center py-4">
+                                              <CreditCard className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                              <p className="text-sm text-slate-500 mb-3">No cards in this team</p>
+                                              <button
+                                                onClick={() => handleAddCardToTeam(team._id, org._id)}
+                                                className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-slate-900 text-white rounded hover:bg-slate-800"
+                                              >
+                                                <Plus className="w-3 h-3" />
+                                                Add Card
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <div className="grid gap-3">
+                                              {cards.map((card) => (
+                                                <div key={card._id} className="bg-white rounded border border-slate-200 overflow-hidden">
+                                                  <div className="flex flex-col sm:flex-row">
+                                                    <div className="flex-1 p-3">
+                                                      <div className="flex items-start gap-3">
+                                                        <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
+                                                          {card.profilePicture ? (
+                                                            <img src={card.profilePicture} alt={card.fullName} className="w-full h-full object-cover" />
+                                                          ) : (
+                                                            <div className="w-full h-full flex items-center justify-center">
+                                                              <User className="w-5 h-5 text-slate-400" />
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                          <h6 className="font-medium text-slate-900 text-sm truncate">{card.fullName}</h6>
+                                                          {card.position && <p className="text-xs text-slate-600">{card.position}</p>}
+                                                          <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                                                            <span className="flex items-center gap-0.5">
+                                                              <Eye className="w-3 h-3" />
+                                                              {card.viewCount}
+                                                            </span>
+                                                            <span className={`px-1.5 py-0.5 rounded text-xs ${
+                                                              card.isPublic ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
+                                                            }`}>
+                                                              {card.isPublic ? 'Public' : 'Private'}
+                                                            </span>
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                      <div className="flex gap-1 mt-2">
+                                                        <button
+                                                          onClick={() => handleEditCard(card)}
+                                                          className="flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
+                                                        >
+                                                          <Edit2 className="w-2.5 h-2.5" />
+                                                          Edit
+                                                        </button>
+                                                        <a
+                                                          href={getPublicUrl(card._id)}
+                                                          target="_blank"
+                                                          rel="noopener noreferrer"
+                                                          className="flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
+                                                        >
+                                                          <ExternalLink className="w-2.5 h-2.5" />
+                                                          View
+                                                        </a>
+                                                        <button
+                                                          onClick={() => handleDeleteCard(card._id, team._id)}
+                                                          className="flex items-center gap-0.5 px-1.5 py-0.5 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100"
+                                                        >
+                                                          <Trash2 className="w-2.5 h-2.5" />
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                    <div className="p-3 bg-slate-50 border-t sm:border-t-0 sm:border-l border-slate-200 flex items-center justify-center">
+                                                      <QRCodeDisplay value={getPublicUrl(card._id)} size={80} />
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                        </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>
-          ) : (
+          ) : showOrgForm ? (
             <div className="bg-white rounded-xl border border-slate-200 p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-6">
                 {selectedOrg ? 'Edit Organization' : 'Create New Organization'}
@@ -598,8 +799,8 @@ export default function OrganizationDashboard() {
                     <textarea
                       value={orgForm.description}
                       onChange={(e) => setOrgForm({ ...orgForm, description: e.target.value })}
-                      rows={3}
-                      placeholder="Brief description of the organization"
+                      rows={2}
+                      placeholder="Brief description"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
@@ -609,7 +810,6 @@ export default function OrganizationDashboard() {
                       type="url"
                       value={orgForm.logo}
                       onChange={(e) => setOrgForm({ ...orgForm, logo: e.target.value })}
-                      placeholder="https://..."
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
@@ -619,7 +819,6 @@ export default function OrganizationDashboard() {
                       type="url"
                       value={orgForm.website}
                       onChange={(e) => setOrgForm({ ...orgForm, website: e.target.value })}
-                      placeholder="https://..."
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
@@ -629,7 +828,6 @@ export default function OrganizationDashboard() {
                       type="email"
                       value={orgForm.email}
                       onChange={(e) => setOrgForm({ ...orgForm, email: e.target.value })}
-                      placeholder="contact@company.com"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
@@ -639,17 +837,6 @@ export default function OrganizationDashboard() {
                       type="tel"
                       value={orgForm.phone}
                       onChange={(e) => setOrgForm({ ...orgForm, phone: e.target.value })}
-                      placeholder="+1 234 567 8900"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
-                    <input
-                      type="text"
-                      value={orgForm.address}
-                      onChange={(e) => setOrgForm({ ...orgForm, address: e.target.value })}
-                      placeholder="123 Business St, City, Country"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
                     />
                   </div>
@@ -666,104 +853,12 @@ export default function OrganizationDashboard() {
                     type="submit"
                     className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800"
                   >
-                    {selectedOrg ? 'Update Organization' : 'Create Organization'}
+                    {selectedOrg ? 'Update' : 'Create'}
                   </button>
                 </div>
               </form>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Teams Tab */}
-      {activeTab === 'teams' && (
-        <div className="space-y-6">
-          {!showTeamForm ? (
-            <>
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-slate-900">Your Teams</h3>
-                <button
-                  onClick={() => { setTeamForm({ name: '', description: '', organizationId: organizations[0]?._id || '' }); setShowTeamForm(true); }}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
-                  disabled={organizations.length === 0}
-                >
-                  <Plus className="w-4 h-4" />
-                  Create Team
-                </button>
-              </div>
-
-              {organizations.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-                  <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-slate-900 mb-2">Create an organization first</h3>
-                  <p className="text-slate-600 mb-6">You need to create an organization before adding teams</p>
-                  <button
-                    onClick={() => setActiveTab('organizations')}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Create Organization
-                  </button>
-                </div>
-              ) : teams.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-                  <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-slate-900 mb-2">No teams yet</h3>
-                  <p className="text-slate-600 mb-6">Create teams to organize your employees</p>
-                  <button
-                    onClick={() => { setTeamForm({ name: '', description: '', organizationId: organizations[0]?._id || '' }); setShowTeamForm(true); }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Create Team
-                  </button>
-                </div>
-              ) : (
-                <div className="grid gap-6">
-                  {teams.map((team) => {
-                    const org = organizations.find(o => o._id === team.organizationId);
-                    return (
-                      <div key={team._id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                        <div className="p-6">
-                          <div className="flex items-start justify-between mb-4">
-                            <div>
-                              <h4 className="text-lg font-semibold text-slate-900">{team.name}</h4>
-                              {team.description && (
-                                <p className="text-sm text-slate-600 mt-1">{team.description}</p>
-                              )}
-                              {org && (
-                                <p className="text-sm text-purple-600 mt-2 flex items-center gap-1">
-                                  <Building2 className="w-3 h-3" />
-                                  {org.name}
-                                </p>
-                              )}
-                              <p className="text-sm text-slate-500 mt-1">
-                                {team.members?.length || 0} member{(team.members?.length || 0) !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => handleEditTeam(team)}
-                                className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTeam(team._id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          ) : (
+          ) : showTeamForm ? (
             <div className="bg-white rounded-xl border border-slate-200 p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-6">
                 {selectedTeam ? 'Edit Team' : 'Create New Team'}
@@ -799,15 +894,14 @@ export default function OrganizationDashboard() {
                   <textarea
                     value={teamForm.description}
                     onChange={(e) => setTeamForm({ ...teamForm, description: e.target.value })}
-                    rows={3}
-                    placeholder="Brief description of the team"
+                    rows={2}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900"
                   />
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => { setShowTeamForm(false); setSelectedTeam(null); }}
+                    onClick={() => { setShowTeamForm(false); setSelectedTeam(null); setTeamOrgId(''); }}
                     className="flex-1 px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-50"
                   >
                     Cancel
@@ -816,111 +910,11 @@ export default function OrganizationDashboard() {
                     type="submit"
                     className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800"
                   >
-                    {selectedTeam ? 'Update Team' : 'Create Team'}
+                    {selectedTeam ? 'Update' : 'Create'}
                   </button>
                 </div>
               </form>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Business Cards Tab */}
-      {activeTab === 'cards' && (
-        <div className="space-y-6">
-          {!showCardForm ? (
-            <>
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-slate-900">Business Cards</h3>
-                <button
-                  onClick={() => { resetCardForm(); setShowCardForm(true); }}
-                  className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Create Card
-                </button>
-              </div>
-
-              {businessCards.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-                  <CreditCard className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-slate-900 mb-2">No business cards yet</h3>
-                  <p className="text-slate-600 mb-6">Create business cards for your employees</p>
-                  <button
-                    onClick={() => { resetCardForm(); setShowCardForm(true); }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Create Card
-                  </button>
-                </div>
-              ) : (
-                <div className="grid gap-6">
-                  {businessCards.map((card) => (
-                    <div key={card._id} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                      <div className="flex flex-col md:flex-row">
-                        <div className="flex-1 p-6">
-                          <div className="flex items-start gap-4">
-                            <div className="w-16 h-16 rounded-full bg-slate-100 overflow-hidden flex-shrink-0">
-                              {card.profilePicture ? (
-                                <img src={card.profilePicture} alt={card.fullName} className="w-full h-full object-cover" />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <User className="w-8 h-8 text-slate-400" />
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className="text-lg font-semibold text-slate-900 truncate">{card.fullName}</h4>
-                              {card.position && <p className="text-sm text-slate-600">{card.position}</p>}
-                              {card.company && <p className="text-sm text-slate-500">{card.company}</p>}
-                              <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
-                                <span className="flex items-center gap-1">
-                                  <Eye className="w-4 h-4" />
-                                  {card.viewCount} views
-                                </span>
-                                <span className={`px-2 py-0.5 rounded-full text-xs ${
-                                  card.isPublic ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'
-                                }`}>
-                                  {card.isPublic ? 'Public' : 'Private'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex gap-2 mt-4">
-                            <button
-                              onClick={() => handleEditCard(card)}
-                              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
-                            >
-                              Edit
-                            </button>
-                            <a
-                              href={getPublicUrl(card._id)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              View
-                            </a>
-                            <button
-                              onClick={() => handleDeleteCard(card._id)}
-                              className="flex items-center gap-1 px-3 py-1.5 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                        <div className="p-6 bg-slate-50 border-t md:border-t-0 md:border-l border-slate-200">
-                          <QRCodeDisplay value={getPublicUrl(card._id)} size={120} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
           ) : (
             <div className="bg-white rounded-xl border border-slate-200 p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-6">
@@ -1015,12 +1009,12 @@ export default function OrganizationDashboard() {
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    id="isPublic"
+                    id="isPublicOrg"
                     checked={cardForm.isPublic}
                     onChange={(e) => setCardForm({ ...cardForm, isPublic: e.target.checked })}
                     className="rounded"
                   />
-                  <label htmlFor="isPublic" className="text-sm text-slate-700">Make this card publicly visible</label>
+                  <label htmlFor="isPublicOrg" className="text-sm text-slate-700">Make this card publicly visible</label>
                 </div>
                 <div className="flex gap-3 pt-4">
                   <button
@@ -1034,7 +1028,7 @@ export default function OrganizationDashboard() {
                     type="submit"
                     className="flex-1 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800"
                   >
-                    {selectedCard ? 'Update Card' : 'Create Card'}
+                    {selectedCard ? 'Update' : 'Create'}
                   </button>
                 </div>
               </form>
